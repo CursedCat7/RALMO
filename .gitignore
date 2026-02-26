@@ -1,7 +1,61 @@
-# Ignore entire docs directory
-#docs/
-reference/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# If you want to keep the directory but ignore its contents, use instead:
-# docs/*
-# !docs/.gitkeep
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Poetry
+poetry.lock
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (GGUF files are large)
+models/*.gguf
+models/*.bin
+
+# Logs
+logs/
+*.csv
+*.db
+
+# Experiments output
+experiments/outputs/
+experiments/results/
+
+# Hydra outputs
+outputs/
+multirun/
+
+# Notebooks checkpoints
+notebooks/.ipynb_checkpoints/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# pytest
+.pytest_cache/
+
+# Reference docs (not tracked in git)
+reference/

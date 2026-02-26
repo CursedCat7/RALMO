@@ -15,10 +15,10 @@ infrastructure strain, economic inefficiency, and privacy risks.
 
 RALMO proposes a principled alternative:
 
--   Local-first inference by default\
--   Confidence-calibrated selective cloud invocation\
--   Resource-aware orchestration across multi-tier model stacks\
--   Modular integration of domain-specialized local expert models\
+-   Local-first inference by default
+-   Confidence-calibrated selective cloud invocation
+-   Resource-aware orchestration across multi-tier model stacks
+-   Modular integration of domain-specialized local expert models
 -   Sustainable reduction of large-scale cloud computation
 
 The long-term objective is to enable energy-efficient,
@@ -85,55 +85,55 @@ Subject to:
 
 Where:
 
--   π = inference routing policy\
--   E(π) = expected energy consumption\
--   C(π) = cloud invocation cost\
+-   π = inference routing policy
+-   E(π) = expected energy consumption
+-   C(π) = cloud invocation cost
 -   τ = minimum acceptable performance threshold
 
 Research dimensions include:
 
--   Confidence calibration theory\
--   Energy-aware routing strategies\
--   Multi-tier benchmarking\
--   Privacy-preserving arbitration\
+-   Confidence calibration theory
+-   Energy-aware routing strategies
+-   Multi-tier benchmarking
+-   Privacy-preserving arbitration
 -   Cloud dependency minimization
 
 ------------------------------------------------------------------------
 
 ## ⚡ Why RALMO Matters
 
--   Reduces unnecessary cloud-scale energy consumption\
--   Preserves user privacy through local-first processing\
--   Enables modular expert model ecosystems\
--   Optimizes token-based economic costs\
+-   Reduces unnecessary cloud-scale energy consumption
+-   Preserves user privacy through local-first processing
+-   Enables modular expert model ecosystems
+-   Optimizes token-based economic costs
 -   Encourages sustainable AI deployment practices
 
 ------------------------------------------------------------------------
 
 ## 📦 Project Structure (Planned)
 
--   ralmo-core/ -- Orchestration engine\
--   confidence/ -- Uncertainty & calibration models\
--   resource-monitor/ -- Runtime profiling tools\
--   cloud-adapters/ -- External LLM API interfaces\
--   expert-modules/ -- Plug-and-play local expert models\
+-   ralmo-core/ -- Orchestration engine
+-   confidence/ -- Uncertainty & calibration models
+-   resource-monitor/ -- Runtime profiling tools
+-   cloud-adapters/ -- External LLM API interfaces
+-   expert-modules/ -- Plug-and-play local expert models
 -   benchmarks/ -- Evaluation and energy measurement framework
 
 ------------------------------------------------------------------------
 
 ## 📊 Benchmark Objectives
 
--   Cloud invocation reduction rate\
--   Energy per query\
--   Latency distribution\
--   Token cost savings\
+-   Cloud invocation reduction rate
+-   Energy per query
+-   Latency distribution
+-   Token cost savings
 -   Accuracy retention vs. full-cloud baseline
 
 ------------------------------------------------------------------------
 
 ## 🔐 Privacy Model
 
-RALMO enforces a local-first processing policy.\
+RALMO enforces a local-first processing policy.
 Cloud escalation is policy-driven, auditable, and configurable.
 
 ------------------------------------------------------------------------
@@ -169,9 +169,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 RALMO aims to redefine LLM deployment:
 
--   From cloud-first to local-first\
--   From brute-force scaling to resource-aware intelligence\
--   From centralized dependency to modular expertise\
+-   From cloud-first to local-first
+-   From brute-force scaling to resource-aware intelligence
+-   From centralized dependency to modular expertise
 -   From uncontrolled consumption to sustainable AI systems
 
 ------------------------------------------------------------------------

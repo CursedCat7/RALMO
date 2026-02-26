@@ -1,0 +1,46 @@
+# RALMO Default Configuration
+# All hyperparameters are configurable via Hydra overrides.
+
+draft:
+  model_path: "models/draft.gguf"       # Path to draft model (GGUF format)
+  n_ctx: 2048                            # Context window size
+  n_gpu_layers: -1                       # GPU layers (-1 = all, 0 = CPU only)
+  temperature: 0.8                       # Sampling temperature for draft
+  seed: 42                               # Random seed for reproducibility
+
+target:
+  model_path: "models/target.gguf"       # Path to target model (GGUF format)
+  n_ctx: 2048                            # Context window size
+  n_gpu_layers: 0                        # CPU only for target model
+  temperature: 0.0                       # Deterministic decoding
+  seed: 42                               # Random seed for reproducibility
+
+speculative:
+  policy_type: "static"                  # static | adaptive
+  k: 4                                   # Number of draft tokens per iteration
+  tau: -0.7                              # Acceptance threshold (logprob scale)
+  max_tokens: 512                        # Maximum output tokens
+  adaptive:
+    alpha: 0.1                           # Entropy sensitivity
+    tau_0: -0.7                          # Base threshold
+    h_0: 1.0                             # Baseline entropy
+
+kv_cache:
+  enabled: true                          # Enable KV cache management
+  use_native: true                       # Use llama.cpp native KV state if available
+
+logging:
+  format: "csv"                          # csv | sqlite
+  output_dir: "./logs"                   # Log output directory
+  log_per_request: true                  # One log entry per request
+  verbose: false                         # Verbose console output
+
+power:
+  enabled: false                         # Enable power monitoring (stub)
+  backend: "stub"                        # stub | rapl | powermetrics
+
+external:
+  enabled: false                         # Enable external verifier
+  provider: "stub"                       # stub | openai | anthropic
+  api_key: ""                            # API key (set via env var preferred)
+  model: ""                              # Cloud model identifier
