@@ -1,5 +1,6 @@
 # Ignore entire docs directory
-docs/
+#docs/
+reference/
 
 # If you want to keep the directory but ignore its contents, use instead:
 # docs/*
