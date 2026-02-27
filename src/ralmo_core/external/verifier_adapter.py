@@ -90,3 +90,35 @@ class StubVerifier(ExternalVerifier):
     def is_available(self) -> bool:
         """Stub is never 'available' as a real verifier."""
         return False
+
+
+def create_verifier(
+    provider: str = "stub",
+    api_key: str = "",
+    model: str = "",
+) -> ExternalVerifier:
+    """Factory function to create the appropriate verifier.
+
+    Args:
+        provider: Verifier provider ('stub', 'openai').
+        api_key: API key for cloud providers.
+        model: Model identifier for cloud providers.
+
+    Returns:
+        An ExternalVerifier instance.
+    """
+    if provider == "openai":
+        from ralmo_core.external.openai_verifier import OpenAIVerifier
+
+        return OpenAIVerifier(
+            api_key=api_key or None,
+            model=model or "gpt-4o-mini",
+        )
+
+    if provider not in ("stub", "openai") and provider:
+        logger.warning(
+            "Unknown verifier provider '%s'. Falling back to stub.",
+            provider,
+        )
+
+    return StubVerifier()

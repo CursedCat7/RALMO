@@ -12,9 +12,20 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+from ralmo_core.draft_selector import (
+    BestOfNSelector,
+    DraftSelector,
+    MajorityVoteSelector,
+)
+from ralmo_core.external.verifier_adapter import (
+    ExternalVerifier,
+    VerificationResult,
+    create_verifier,
+)
 from ralmo_core.kv_manager import KVManager
 from ralmo_core.models.draft_model import DraftModel
 from ralmo_core.models.target_model import TargetModel
+from ralmo_core.multi_draft_engine import MultiDraftEngine
 from ralmo_core.policy import AdaptivePolicy, BasePolicy, StaticPolicy
 from ralmo_core.speculative import SpeculativeEngine, SpeculativeResult
 from ralmo_core.utils.logger import RALMOLogger
@@ -40,6 +51,8 @@ class OrchestrationResult:
     stats: Any
     energy_joules: float
     finish_reason: str
+    escalated: bool = False
+    verifier_result: Any | None = None
 
 
 class Orchestrator:
@@ -65,12 +78,14 @@ class Orchestrator:
         """
         self.cfg = cfg
         self.draft_model: DraftModel | None = None
+        self.draft_models: list[DraftModel] = []
         self.target_model: TargetModel | None = None
-        self.engine: SpeculativeEngine | None = None
+        self.engine: SpeculativeEngine | MultiDraftEngine | None = None
         self.policy: BasePolicy | None = None
         self.kv_manager: KVManager | None = None
         self.ralmo_logger: RALMOLogger | None = None
         self.power_monitor: PowerMonitor | None = None
+        self.verifier: ExternalVerifier | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -117,29 +132,74 @@ class Orchestrator:
         )
 
         # Initialize models
-        self.draft_model = DraftModel()
-        self.draft_model.load(
-            model_path=self.cfg.draft.model_path,
-            n_ctx=self.cfg.draft.n_ctx,
-            n_gpu_layers=self.cfg.draft.n_gpu_layers,
-            seed=self.cfg.draft.seed,
-        )
+        multi_draft_cfg = self.cfg.get("multi_draft", {})
+        use_multi_draft = multi_draft_cfg.get("enabled", False)
 
-        self.target_model = TargetModel()
-        self.target_model.load(
-            model_path=self.cfg.target.model_path,
-            n_ctx=self.cfg.target.n_ctx,
-            n_gpu_layers=self.cfg.target.n_gpu_layers,
-            seed=self.cfg.target.seed,
-        )
+        if use_multi_draft:
+            model_cfgs = multi_draft_cfg.get("models", [])
+            if not model_cfgs:
+                logger.warning("multi_draft enabled but no models. Using single draft.")
+                use_multi_draft = False
 
-        # Initialize speculative engine
-        self.engine = SpeculativeEngine(
-            draft_model=self.draft_model,
-            target_model=self.target_model,
-            policy=self.policy,
-            kv_manager=self.kv_manager,
-        )
+        if use_multi_draft:
+            for mcfg in model_cfgs:
+                dm = DraftModel()
+                dm.load(
+                    model_path=mcfg.get("path", self.cfg.draft.model_path),
+                    n_ctx=mcfg.get("n_ctx", self.cfg.draft.n_ctx),
+                    n_gpu_layers=mcfg.get("n_gpu_layers", self.cfg.draft.n_gpu_layers),
+                    seed=self.cfg.draft.get("seed", 42),
+                )
+                self.draft_models.append(dm)
+            self.draft_model = self.draft_models[0]
+            logger.info("Loaded %d draft models for multi-draft.", len(self.draft_models))
+
+            strategy = multi_draft_cfg.get("strategy", "best_of_n")
+            selector: DraftSelector = (
+                MajorityVoteSelector()
+                if strategy == "majority_vote"
+                else BestOfNSelector()
+            )
+
+            self.target_model = TargetModel()
+            self.target_model.load(
+                model_path=self.cfg.target.model_path,
+                n_ctx=self.cfg.target.n_ctx,
+                n_gpu_layers=self.cfg.target.n_gpu_layers,
+                seed=self.cfg.target.seed,
+            )
+
+            self.engine = MultiDraftEngine(
+                draft_models=self.draft_models,  # type: ignore[arg-type]
+                target_model=self.target_model,  # type: ignore[arg-type]
+                policy=self.policy,
+                kv_manager=self.kv_manager,
+                selector=selector,
+            )
+            logger.info("MultiDraftEngine initialized (strategy=%s).", strategy)
+        else:
+            self.draft_model = DraftModel()
+            self.draft_model.load(
+                model_path=self.cfg.draft.model_path,
+                n_ctx=self.cfg.draft.n_ctx,
+                n_gpu_layers=self.cfg.draft.n_gpu_layers,
+                seed=self.cfg.draft.seed,
+            )
+
+            self.target_model = TargetModel()
+            self.target_model.load(
+                model_path=self.cfg.target.model_path,
+                n_ctx=self.cfg.target.n_ctx,
+                n_gpu_layers=self.cfg.target.n_gpu_layers,
+                seed=self.cfg.target.seed,
+            )
+
+            self.engine = SpeculativeEngine(
+                draft_model=self.draft_model,
+                target_model=self.target_model,
+                policy=self.policy,
+                kv_manager=self.kv_manager,
+            )
 
         # Initialize logging
         self.ralmo_logger = RALMOLogger(
@@ -152,6 +212,14 @@ class Orchestrator:
         self.power_monitor = PowerMonitor(
             enabled=self.cfg.power.get("enabled", False),
             backend=self.cfg.power.get("backend", "stub"),
+        )
+
+        # Initialize external verifier
+        ext_cfg = self.cfg.get("external", {})
+        self.verifier = create_verifier(
+            provider=ext_cfg.get("provider", "stub"),
+            api_key=ext_cfg.get("api_key", ""),
+            model=ext_cfg.get("model", ""),
         )
 
         self._initialized = True
@@ -194,6 +262,24 @@ class Orchestrator:
         # Stop power measurement
         energy = self.power_monitor.stop_measurement()
 
+        # Check if escalation is needed
+        escalated = False
+        verifier_result: VerificationResult | None = None
+        escalation_threshold = self.cfg.get("external", {}).get(
+            "escalation_threshold", 0.3
+        )
+        if (
+            result.stats.acceptance_rate < escalation_threshold
+            and self.verifier is not None
+            and self.verifier.is_available()
+        ):
+            logger.info(
+                "Low acceptance rate (%.1f%%). Escalating to external verifier.",
+                result.stats.acceptance_rate * 100,
+            )
+            verifier_result = self.verifier.verify(prompt, result.text)
+            escalated = True
+
         # Log the result
         if self.ralmo_logger is not None:
             self.ralmo_logger.log_request(
@@ -202,18 +288,33 @@ class Orchestrator:
                 energy_joules=energy,
             )
 
+        final_text = result.text
+        if (
+            escalated
+            and verifier_result
+            and not verifier_result.verified
+            and verifier_result.alternative_text
+        ):
+            final_text = verifier_result.alternative_text
+
         return OrchestrationResult(
-            text=result.text,
+            text=final_text,
             tokens=result.tokens,
             stats=result.stats,
             energy_joules=energy,
             finish_reason=result.finish_reason,
+            escalated=escalated,
+            verifier_result=verifier_result,
         )
 
     def shutdown(self) -> None:
         """Clean up resources."""
         logger.info("Shutting down RALMO Orchestrator...")
-        if self.draft_model is not None:
+        # Clean up all draft models (multi-draft mode)
+        if self.draft_models:
+            for dm in self.draft_models:
+                dm.reset()
+        elif self.draft_model is not None:
             self.draft_model.reset()
         if self.target_model is not None:
             self.target_model.reset()

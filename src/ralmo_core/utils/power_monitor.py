@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,29 +36,48 @@ class PowerMonitor:
 
         Args:
             enabled: Whether to enable power monitoring.
-            backend: Measurement backend ('stub', 'rapl', 'powermetrics').
+            backend: Measurement backend ('stub', 'rapl').
         """
         self.enabled = enabled
         self.backend = backend
         self._start_time: float | None = None
         self._is_measuring = False
+        self._rapl: Any = None
+        self._rapl_start_uj: int = 0
 
-        if enabled and backend != "stub":
-            logger.warning(
-                "Power monitoring backend '%s' not yet implemented. Using stub.",
-                backend,
-            )
+        if enabled and backend == "rapl":
+            self._init_rapl()
+
+    def _init_rapl(self) -> None:
+        """Initialize RAPL backend if available."""
+        try:
+            from ralmo_core.utils.rapl_backend import RAPLBackend
+
+            rapl = RAPLBackend()
+            if rapl.available:
+                self._rapl = rapl
+                logger.info("RAPL power monitoring enabled.")
+            else:
+                logger.warning(
+                    "RAPL not available on this system. "
+                    "Falling back to stub."
+                )
+                self.backend = "stub"
+        except Exception as e:
+            logger.warning("Failed to init RAPL: %s. Using stub.", e)
+            self.backend = "stub"
 
     def start_measurement(self) -> None:
-        """Begin an energy measurement interval.
-
-        Can be called even when disabled (no-op).
-        """
+        """Begin an energy measurement interval."""
         if not self.enabled:
             return
 
         self._start_time = time.perf_counter()
         self._is_measuring = True
+
+        if self.backend == "rapl" and self._rapl is not None:
+            self._rapl_start_uj = self._rapl.read_energy_uj()
+
         logger.debug("Power measurement started (backend=%s)", self.backend)
 
     def stop_measurement(self) -> float:
@@ -74,13 +94,25 @@ class PowerMonitor:
         elapsed = time.perf_counter() - (self._start_time or 0.0)
         self._start_time = None
 
-        if self.backend == "stub":
-            # Stub: return 0.0 Joules
-            logger.debug("Power measurement stopped (stub): elapsed=%.3fs, energy=0.0J", elapsed)
-            return 0.0
+        if self.backend == "rapl" and self._rapl is not None:
+            end_uj = self._rapl.read_energy_uj()
+            energy_j = self._rapl.compute_delta_joules(
+                self._rapl_start_uj, end_uj
+            )
+            logger.debug(
+                "Power measurement stopped (RAPL): "
+                "elapsed=%.3fs, energy=%.6fJ",
+                elapsed,
+                energy_j,
+            )
+            return float(energy_j)
 
-        # Future backends will compute actual energy here
-        logger.debug("Power measurement stopped: elapsed=%.3fs", elapsed)
+        # Stub: return 0.0 Joules
+        logger.debug(
+            "Power measurement stopped (stub): "
+            "elapsed=%.3fs, energy=0.0J",
+            elapsed,
+        )
         return 0.0
 
     def get_energy_joules(self) -> float:
@@ -89,11 +121,18 @@ class PowerMonitor:
         Returns:
             Estimated energy in Joules. Always 0.0 for stub backend.
         """
-        if self.backend == "stub":
-            return 0.0
+        if self.backend == "rapl" and self._rapl is not None:
+            current_uj = self._rapl.read_energy_uj()
+            return float(
+                self._rapl.compute_delta_joules(
+                    self._rapl_start_uj, current_uj
+                )
+            )
         return 0.0
 
     @property
     def is_available(self) -> bool:
         """Check if a real power monitoring backend is available."""
+        if self.backend == "rapl":
+            return self._rapl is not None
         return self.enabled and self.backend != "stub"
